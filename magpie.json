@@ -10,8 +10,14 @@
     "magpie": {
       "display_name": "Magpie",
       "desc": "统一管理 AI 模型与本地网关。为局域网内的 Claude Code、Codex、Gemini CLI 等客户端提供 OpenAI / Anthropic / Gemini 兼容接口，供应商、密钥与用量集中在一处配置。管理页 3430，网关 3425。",
-      "platform": ["x86", "arm"],
-      "categories": ["AI赋能", "编程开发"],
+      "platform": [
+        "x86",
+        "arm"
+      ],
+      "categories": [
+        "AI赋能",
+        "编程开发"
+      ],
       "icon_url": "https://raw.githubusercontent.com/fisher423/FnDepot/main/magpie/ICON.PNG",
       "readme_url": "https://raw.githubusercontent.com/fisher423/FnDepot/main/magpie/README.md",
       "bug_report_url": "https://github.com/yetone/magpie/issues",
@@ -25,8 +31,8 @@
       "service_port": "3430",
       "releases": {
         "0.1.3134": {
-          "changelog": "跟随上游 yetone/magpie v0.1.3134 构建。\n• 管理页 3430，AI 网关 3425\n• 以 magpie_fnos 用户运行，不使用 root\n• 访问密钥最低 6 位（字母+数字）\n• 内置 CA 根证书，系统未装 ca-certificates 也能访问 HTTPS",
-          "updated_at": "2026-11-06T15:55:00+08:00",
+          "changelog": "跟随上游 yetone/magpie v0.1.3134 构建。",
+          "updated_at": "2026-11-06T15:57:52+08:00",
           "packages": {
             "x86": {
               "download_url": "https://github.com/fisher423/FnDepot/releases/download/v0.1.3134/magpie_0.1.3134_x86.fpk",
