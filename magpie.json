@@ -128,17 +128,17 @@
         },
         "0.1.3148": {
           "changelog": "跟随上游 yetone/magpie v0.1.3148 构建。支持应用内自动更新。",
-          "updated_at": "2026-11-06T17:47:49+08:00",
+          "updated_at": "2026-11-06T17:50:54+08:00",
           "packages": {
             "x86": {
               "download_url": "https://github.com/fisher423/FnDepot/releases/download/v0.1.3148/magpie_0.1.3148_x86.fpk",
-              "sha256": "ce77c6151743e24e2629471b39fb9ff2a0e93bf6d7e8ace3204fe9af8a306c4c",
-              "size": 29068483
+              "sha256": "d4041e8469bfeb101021944888ce8ea61b60a0512169fbd0facc46b56634e896",
+              "size": 29068587
             },
             "arm": {
               "download_url": "https://github.com/fisher423/FnDepot/releases/download/v0.1.3148/magpie_0.1.3148_arm.fpk",
-              "sha256": "7f31d1286179269984f4af39cceb517c344e5cdd1cf646e750cbc14e85fec588",
-              "size": 26931058
+              "sha256": "5b2a3ca8905a52e3b76f868a9a77707b749138ddc7d4edc29ff51994a35037c8",
+              "size": 26931469
             }
           }
         }
