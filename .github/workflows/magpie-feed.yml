@@ -114,6 +114,15 @@ jobs:
           gh release upload "$FEED_TAG" --repo "$REPO" update-feed.json --clobber
           echo "published $version"
 
+      # releases/latest/download/update-feed.json is the URL the FPK is built
+      # with, so this release has to stay the repo's latest one. Re-asserted
+      # every run, in case an FPK release was published in between.
+      - name: Keep the feed release as latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: gh release edit "$FEED_TAG" --repo "$REPO" --latest
+
       - name: Record the mirrored version
         run: |
           set -euo pipefail
