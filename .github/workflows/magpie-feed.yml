@@ -1,0 +1,113 @@
+name: magpie-feed
+
+# Keep the fnOS Magpie package on upstream's releases without building anything.
+#
+# The FPK sets MAGPIE_UPDATE_FEED to this repo's rolling release:
+#   https://github.com/fisher423/FnDepot/releases/latest/download/update-feed.json
+# so the feed published here is exactly what the NAS installs. This workflow
+# copies yetone/magpie's own feed (usemagpie.ai/api/latest) over it verbatim —
+# same version, same notes, same asset URLs and SHA-256s — so the binary that
+# lands on the box is byte-for-byte the one upstream shipped, and the box
+# follows upstream just like the desktop app does.
+#
+# No FPK rebuild, no 70 MB upload: one small JSON, rewritten only when
+# upstream releases something new.
+
+on:
+  schedule:
+    - cron: "23 * * * *" # hourly; GitHub may start it a few minutes late
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: magpie-feed
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_FEED: https://usemagpie.ai/api/latest
+  FEED_TAG: magpie-feed
+  STATE: .github/magpie-feed.version
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read upstream feed
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 5 --max-time 30 "$UPSTREAM_FEED" -o /tmp/upstream.json
+          python3 - <<'PY'
+          import json, sys
+
+          src = json.load(open('/tmp/upstream.json', encoding='utf-8'))
+          version = str(src.get('version') or '').strip()
+          assets = src.get('assets') or {}
+          # the two files a fnOS box ever picks: magpie's updater asks for
+          # "magpie-cli-<goos>-<goarch>" and nothing else
+          want = ('magpie-cli-linux-amd64', 'magpie-cli-linux-arm64')
+          missing = [n for n in want if n not in assets]
+          if not version or missing:
+              sys.exit('upstream feed is incomplete: %s' % (missing or 'no version'))
+          for n in want:
+              for k in ('url', 'size', 'sha256'):
+                  if not assets[n].get(k):
+                      sys.exit('%s has no %s' % (n, k))
+
+          feed = {
+              'version': version,
+              'notes': (src.get('notes') or '').strip() or ('magpie %s' % version),
+              'url': src.get('url') or '',
+              'assets': assets,
+          }
+          with open('update-feed.json', 'w', encoding='utf-8') as fh:
+              json.dump(feed, fh, ensure_ascii=False, indent=2)
+              fh.write('\n')
+          print('upstream:', version, '·', ', '.join(want))
+          PY
+
+      - name: Publish the feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version=$(python3 -c 'import json; print(json.load(open("update-feed.json"))["version"])')
+
+          if ! gh release view "$FEED_TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "no rolling release yet, creating $FEED_TAG"
+            gh release create "$FEED_TAG" --repo "$REPO" --latest \
+              --title "Magpie 更新源" \
+              --notes "滚动发布：update-feed.json 每小时镜像 yetone/magpie 官方更新源，版本、说明、资产地址与 SHA-256 全部来自上游，不做二次构建。飞牛 fnOS 上的 Magpie 读这个文件自动更新。"
+          fi
+
+          rm -f /tmp/published.json
+          gh release download "$FEED_TAG" --repo "$REPO" \
+            --pattern update-feed.json --output /tmp/published.json --clobber 2>/dev/null || true
+
+          if [ -f /tmp/published.json ] && cmp -s /tmp/published.json update-feed.json; then
+            echo "already at $version, nothing to do"
+            exit 0
+          fi
+
+          gh release upload "$FEED_TAG" --repo "$REPO" update-feed.json --clobber
+          echo "published $version"
+
+      - name: Record the mirrored version
+        run: |
+          set -euo pipefail
+          version=$(python3 -c 'import json; print(json.load(open("update-feed.json"))["version"])')
+          if [ -f "$STATE" ] && [ "$(tr -d '[:space:]' < "$STATE")" = "$version" ]; then
+            echo "state already at $version"
+            exit 0
+          fi
+          mkdir -p "$(dirname "$STATE")"
+          printf '%s\n' "$version" > "$STATE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$STATE"
+          git commit -m "chore(magpie-feed): 镜像上游 ${version}"
+          git push
