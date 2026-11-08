@@ -4,11 +4,15 @@ name: magpie-feed
 #
 # The FPK sets MAGPIE_UPDATE_FEED to this repo's rolling release:
 #   https://github.com/fisher423/FnDepot/releases/latest/download/update-feed.json
-# so the feed published here is exactly what the NAS installs. This workflow
-# copies yetone/magpie's own feed (usemagpie.ai/api/latest) over it verbatim —
-# same version, same notes, same asset URLs and SHA-256s — so the binary that
-# lands on the box is byte-for-byte the one upstream shipped, and the box
-# follows upstream just like the desktop app does.
+# so the feed published here is exactly what the NAS installs. It describes
+# upstream's newest release with upstream's own numbers — the tag, the release
+# notes, the asset URLs, and the per-file SHA-256 GitHub records for each
+# asset — so the binary that lands on the box is byte-for-byte the one
+# yetone/magpie shipped, and the box follows upstream like the desktop app.
+#
+# Read from the GitHub API rather than usemagpie.ai: that site drops requests
+# from datacenter IPs, and the API's `digest` field already carries the same
+# SHA-256 the official feed publishes.
 #
 # No FPK rebuild, no 70 MB upload: one small JSON, rewritten only when
 # upstream releases something new.
@@ -26,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  UPSTREAM_FEED: https://usemagpie.ai/api/latest
+  UPSTREAM_REPO: yetone/magpie
   FEED_TAG: magpie-feed
   STATE: .github/magpie-feed.version
 
@@ -36,37 +40,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read upstream feed
+      - name: Describe upstream's newest release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          curl -fsSL --retry 3 --retry-delay 5 --max-time 30 "$UPSTREAM_FEED" -o /tmp/upstream.json
+          gh api "repos/${UPSTREAM_REPO}/releases/latest" > /tmp/release.json
           python3 - <<'PY'
-          import json, sys
+          import json, os, sys
 
-          src = json.load(open('/tmp/upstream.json', encoding='utf-8'))
-          version = str(src.get('version') or '').strip()
-          assets = src.get('assets') or {}
-          # the two files a fnOS box ever picks: magpie's updater asks for
+          rel = json.load(open('/tmp/release.json', encoding='utf-8'))
+          tag = str(rel.get('tag_name') or '').strip()
+          version = tag[1:] if tag.startswith('v') else tag
+          if not version:
+              sys.exit('upstream release has no tag')
+
+          # the only files a fnOS box ever picks: magpie's updater asks for
           # "magpie-cli-<goos>-<goarch>" and nothing else
           want = ('magpie-cli-linux-amd64', 'magpie-cli-linux-arm64')
-          missing = [n for n in want if n not in assets]
-          if not version or missing:
-              sys.exit('upstream feed is incomplete: %s' % (missing or 'no version'))
+          by_name = {a.get('name'): a for a in rel.get('assets') or []}
+          assets = {}
           for n in want:
-              for k in ('url', 'size', 'sha256'):
-                  if not assets[n].get(k):
-                      sys.exit('%s has no %s' % (n, k))
+              a = by_name.get(n)
+              if not a:
+                  sys.exit('release %s has no %s' % (tag, n))
+              digest = str(a.get('digest') or '')
+              if not digest.startswith('sha256:') or len(digest) != 71:
+                  # an asset without a recorded hash cannot be verified on
+                  # the box, so refuse rather than publish a feed it rejects
+                  sys.exit('%s has no sha256 digest (%r)' % (n, digest))
+              assets[n] = {
+                  'url': a['browser_download_url'],
+                  'size': a['size'],
+                  'sha256': digest[len('sha256:'):],
+              }
 
           feed = {
               'version': version,
-              'notes': (src.get('notes') or '').strip() or ('magpie %s' % version),
-              'url': src.get('url') or '',
+              'notes': (rel.get('body') or '').strip() or ('magpie %s' % version),
+              'url': rel.get('html_url') or '',
               'assets': assets,
           }
           with open('update-feed.json', 'w', encoding='utf-8') as fh:
               json.dump(feed, fh, ensure_ascii=False, indent=2)
               fh.write('\n')
-          print('upstream:', version, '·', ', '.join(want))
+          print('upstream:', tag, '·', ', '.join('%s %s' % (n, assets[n]['sha256'][:12]) for n in want))
           PY
 
       - name: Publish the feed
